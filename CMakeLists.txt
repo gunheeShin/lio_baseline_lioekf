@@ -20,6 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 cmake_minimum_required(VERSION 3.16...3.24)
+# cmake_minimum_required(VERSION 2.8.3)
 project(lio_ekf)
 
 SET(CMAKE_BUILD_TYPE "Release")
@@ -35,8 +36,10 @@ find_package(
              rosbag
              std_msgs
              tf2
-             tf2_ros)
-catkin_package()
+             tf2_ros
+             pcl_ros)
+find_package(PCL 1.8 REQUIRED)
+catkin_package(DEPENDS PCL)
 
 include(kiss-icp.cmake)
 # ROS1 node
@@ -49,6 +52,10 @@ target_include_directories(lio_ekf_node PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src $
 target_link_libraries(lio_ekf_node 
                       kiss_icp::core 
                       Eigen3::Eigen 
-                      ${catkin_LIBRARIES} )
+                      ${catkin_LIBRARIES} 
+                      ${PCL_LIBRARIES} )
 
 install(TARGETS lio_ekf_node RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
+
+target_link_libraries(lio_ekf_node /workspace/lio_baselines_ws/src/lio_baselines/include/data_recorder/build/libdata_recorder.so)
+target_include_directories(lio_ekf_node PRIVATE /workspace/lio_baselines_ws/src/lio_baselines/include/data_recorder)

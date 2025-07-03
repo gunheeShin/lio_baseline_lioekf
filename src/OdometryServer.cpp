@@ -43,11 +43,87 @@
 #include <tf/transform_broadcaster.h>
 #include <tf2_ros/static_transform_broadcaster.h>
 
+#include "data_recorder.h"
+#include <std_srvs/Trigger.h>
+
+std::shared_ptr<DataRecorder<RecordPointType>> recorder_ptr_;
+ros::ServiceServer recorder_server_;
+std::string result_dir, dataset, data_id, test_topic, algorithm, param_set_name;
+std::vector<std::string> lidar_names;
+std::vector<int> lidar_indices;
+int save_frame_mode = 0; 
+std::string save_dir;
+
 std::condition_variable sig_buffer_;
 
 void SigHandle(int sig) {
   ROS_WARN("catch sig %d", sig);
   sig_buffer_.notify_all();
+}
+
+void recordRamUsage(double stamp)
+{
+    pid_t pid = getpid();
+    std::string path = "/proc/" + std::to_string(pid) + "/status";
+    std::ifstream file(path);
+    std::string line;
+    double mem_usage = 0.0;
+    while (std::getline(file, line))
+    {
+        if (line.find("VmRSS:") == 0)
+        {
+            mem_usage = std::stod(line.substr(6)) / 1024.0; // Convert to MB
+            break;
+        }
+    }
+
+    recorder_ptr_->recordValue("RAM_usage", stamp, mem_usage);
+}
+
+// void recordCloud() {
+
+//     if (!recorder_ptr_->isCloudRecordEnabled())
+//         return;
+
+//     if (!recorder_ptr_->isInit()) {
+//         std::cout << "Recorder is not initialized!" << std::endl;
+//         return;
+//     }
+
+//     pcl::PointCloud<RecordPointType>::Ptr record_cloud(new pcl::PointCloud<RecordPointType>);
+//     for (size_t i = 0; i < feats_down_body->points.size(); i++) {
+//         RecordPointType point;
+//         point.x = feats_down_body->points[i].x;
+//         point.y = feats_down_body->points[i].y;
+//         point.z = feats_down_body->points[i].z;
+//         point.intensity = feats_down_body->points[i].intensity;
+
+//         record_cloud->push_back(point);
+//     }
+
+//     recorder_ptr_->recordCloud(record_cloud, lidar_end_time);
+//     recorder_ptr_->saveCloud();
+// }
+
+bool data_recorder_callback(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res)
+{
+    if (recorder_ptr_ != nullptr)
+    {
+
+        recorder_ptr_->savePose();
+        recorder_ptr_->saveTime();
+        recorder_ptr_->saveValue();
+        recorder_ptr_->saveStatus("Finished");
+
+        res.success = true;
+        res.message = "Data saved successfully.";
+    }
+    else
+    {
+        res.success = false;
+        res.message = "Recorder pointer is null, cannot save data.";
+    }
+    return true;
 }
 
 namespace lio_ekf {
@@ -143,6 +219,46 @@ OdometryServer::OdometryServer(const ros::NodeHandle &nh,
 
   lio_para_.initstate_std.imuerror.gyrbias = lio_para_.imunoise.gyrbias_std;
   lio_para_.initstate_std.imuerror.accbias = lio_para_.imunoise.accbias_std;
+
+  //----------------------------------------------------------------------------------------------------
+  // Data Recorder Configurations
+  nh.param<std::string>("data_recorder/result_dir", result_dir, "/");
+  nh.param<std::string>("data_recorder/dataset", dataset, "dataset");
+  nh.param<std::string>("data_recorder/data_id", data_id, "data_id");
+  nh.param<std::string>("data_recorder/test_topic", test_topic, "test_topic");
+  nh.param<std::string>("data_recorder/algorithm", algorithm, "fastlio");
+  nh.param<std::string>("data_recorder/param_set_name", param_set_name, "default");
+  nh.param<std::vector<std::string>>("data_recorder/lidar_names", lidar_names,
+                                      std::vector<std::string>());
+  nh.param<std::vector<int>>("data_recorder/lidar_indices", lidar_indices, std::vector<int>());
+  nh.param<int>("data_recorder/save_frame_mode", save_frame_mode, 0);
+
+  std::string lidars_combination = "";
+  for (auto &index : lidar_indices)
+  {
+      lidars_combination += lidar_names[index] + "_";
+  }
+  lidars_combination = lidars_combination.substr(0, lidars_combination.size() - 1);
+
+  save_dir = result_dir + "/" + dataset + "/" + data_id + "/" + test_topic + "/" + lidars_combination
+              + "/" + algorithm  + "/" + param_set_name;
+
+  // Check variables
+  std::cout << "\033[32m" << "Data Recorder Configurations:" << std::endl;
+  std::cout << "Result Directory: " << result_dir << std::endl;
+  std::cout << "Data ID: " << data_id << std::endl;
+  std::cout << "Test Topic: " << test_topic << std::endl;
+  std::cout << "Parameter Set Name: " << param_set_name << std::endl;
+  std::cout << "LiDAR Comb.: " << lidars_combination << std::endl;
+  std::cout << "Save Directory: " << save_dir << std::endl;
+  std::cout << "\033[0m" << std::endl;
+
+  recorder_ptr_.reset(new DataRecorder<RecordPointType>());
+  recorder_ptr_->init(save_dir, save_frame_mode, true);
+
+  recorder_server_ = nh_.advertiseService("save_data", data_recorder_callback);
+  //----------------------------------------------------------------------------------------------------
+
 
   lio_ekf_ = lio_ekf::LIOEKF(lio_para_);
   lio_ekf_.init();
@@ -371,6 +487,14 @@ void OdometryServer::publishMsgs() {
   Eigen::Quaterniond q_current = Rotation::matrix2quaternion(rotM);
 
   Eigen::Vector3d t_current = newpose.block<3, 1>(0, 3);
+
+  Eigen::Matrix4d pose = Eigen::Matrix4d::Identity();
+  pose.block<3, 3>(0, 0) = rotM;
+  pose.block<3, 1>(0, 3) = t_current;
+  Eigen::Matrix<double, 6, 6> pose_cov = lio_ekf_.getCovariance().block<6, 6>(0, 0);
+  double imu_time  = lio_ekf_.getImutimestamp();
+  recorder_ptr_->recordPose(imu_time, std::tie(pose, pose_cov));
+
   // Broadcast alias transformations to debug all datasets with the same
   // visualizer
   const auto original_pointcloud_frame = lio_ekf_.lidar_header_.frame_id;

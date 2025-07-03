@@ -40,13 +40,19 @@ SigmaPoints toSigmaPoints(const Sophus::SE3d &mean,
   sigma_points[0] = mean;
   Eigen::LLT<MatrixType> chol(covariance);
   const MatrixType L = chol.matrixL();
-  auto positive_transform = std::transform(
-      L.colwise().begin(), L.colwise().end(), std::next(sigma_points.begin()),
-      [&](const auto &column) { return Sophus::SE3d::exp(column) * mean; });
-  std::transform(L.colwise().begin(), L.colwise().end(), positive_transform,
-                 [&](const auto &column) {
-                   return Sophus::SE3d::exp(-1.0 * column) * mean;
-                 });
+  // auto positive_transform = std::transform(
+  //     L.colwise().begin(), L.colwise().end(), std::next(sigma_points.begin()),
+  //     [&](const auto &column) { return Sophus::SE3d::exp(column) * mean; });
+  // std::transform(L.colwise().begin(), L.colwise().end(), positive_transform,
+  //                [&](const auto &column) {
+  //                  return Sophus::SE3d::exp(-1.0 * column) * mean;
+  //                });
+
+  for (int i = 0; i < L.cols(); ++i) {
+    sigma_points[i + 1] = Sophus::SE3d::exp(L.col(i)) * mean;
+    sigma_points[i + 1 + L.cols()] = Sophus::SE3d::exp(-1.0 * L.col(i)) * mean;
+  }
+  
   return sigma_points;
 }
 

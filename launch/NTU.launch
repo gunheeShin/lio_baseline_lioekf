@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="rviz" default="true"/>
+
+  <rosparam command="load" file="$(find lio_ekf)/config/NTU.yaml" />
+
+  <!-- ROS paramaters -->
+  <param name="outputdir" type="string" value="$(find lio_ekf)/output/ntu_viral/eee_01/" />
+
+  <!-- Odometry node -->
+  <node pkg="lio_ekf" type="lio_ekf_node" name="lio_ekf_node" output="screen"/>
+  
+  <!-- Visualizer -->
+  <group if="$(arg rviz)">
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find lio_ekf)/rviz/lio_ekf.rviz"/>
+  </group>
+  
+</launch>
