@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <launch>
-  <arg name="rviz" default="true"/>
+  <arg name="rviz" default="false"/>
 
   <rosparam command="load" file="$(find lio_ekf)/config/NTU.yaml" />
 
@@ -12,7 +12,7 @@
   
   <!-- Visualizer -->
   <group if="$(arg rviz)">
-    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find lio_ekf)/rviz/lio_ekf.rviz"/>
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find lio_ekf)/rviz/NTU.rviz"/>
   </group>
   
 </launch>
