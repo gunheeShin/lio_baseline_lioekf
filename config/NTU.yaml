@@ -36,13 +36,13 @@ lio:
                  0,1,0,
                  0,0,1]
 
-data_recorder:
-    result_dir: "/workspace/lbench/results"
-    dataset: "NTU"
-    data_id: "eee_01"
-    test_topic: "baselines"
-    lidar_names: ["OsHori","OsVert"]
-    lidar_indices: [0]
-    algorithm: "lioekf"
-    param_set_name: "default"
-    save_frame_mode: 0 # 0: no save, 1: save entire frame at once, 2: save each frame
+# data_recorder:
+#     result_dir: "/workspace/lbench/results"
+#     dataset: "NTU"
+#     data_id: "eee_01"
+#     test_topic: "baselines"
+#     lidar_names: ["OsHori","OsVert"]
+#     lidar_indices: [0]
+#     algorithm: "lioekf"
+#     param_set_name: "default"
+#     save_frame_mode: 0 # 0: no save, 1: save entire frame at once, 2: save each frame
